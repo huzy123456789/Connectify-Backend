@@ -1,14 +1,19 @@
-#DONT TOUCH OR CHANGE ANYTHING OR I AM GONNA KILL YOU
+# DONT TOUCH OR CHANGE ANYTHING OR I AM GONNA KILL YOU
 
 steps to start:
 
 open the fkin terminal in the requirements.txt folder then type the following random ass commands:
 
 1- python -m venv venv
+
 2- venv/scripts/activate
+
 3- pip install -r requirements.txt (plz let it run completely or bad stuff will happen)
+
 4- cd Connectify_Backend
+
 5- python manage.py runserver
+
 
 If I am correct and haven't forgotten the basic commands then BOOM the server will be running on the default ip and port.
 EZ init?
