@@ -11,3 +11,8 @@ class Organization(models.Model):
 
     def __str__(self):
         return self.name
+    
+class OrganizationAdmins(models.Model):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='organization_admins')
+    admin = models.ForeignKey(User, on_delete=models.CASCADE, related_name='admin_organizations')
+
