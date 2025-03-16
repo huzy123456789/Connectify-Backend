@@ -1,290 +1,337 @@
+#!/usr/bin/env python
 import requests
 import json
-import os
-from datetime import datetime
+import sys
+from pprint import pprint
 
-# Base URL for the API
-BASE_URL = "http://localhost:8000/api"
+# Configuration
+BASE_URL = 'http://localhost:8000/api'
+TOKEN = None  # Will be set after login
 
-# Test user credentials
-ADMIN_CREDENTIALS = {
-    "login": "admin_test",
-    "password": "admin123"
-}
+# Colors for terminal output
+class Colors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
 
-USER_CREDENTIALS = {
-    "login": "user_test",
-    "password": "user123"
-}
+def print_header(text):
+    print(f"\n{Colors.HEADER}{Colors.BOLD}{'=' * 50}{Colors.ENDC}")
+    print(f"{Colors.HEADER}{Colors.BOLD}{text.center(50)}{Colors.ENDC}")
+    print(f"{Colors.HEADER}{Colors.BOLD}{'=' * 50}{Colors.ENDC}\n")
 
-class APITester:
-    def __init__(self):
-        self.admin_token = None
-        self.user_token = None
-        self.test_post_id = None
-        self.test_comment_id = None
-        self.test_reaction_type_id = None
+def print_subheader(text):
+    print(f"\n{Colors.OKBLUE}{Colors.BOLD}{text}{Colors.ENDC}")
+    print(f"{Colors.OKBLUE}{'-' * 50}{Colors.ENDC}\n")
 
-    def login(self, credentials):
-        """Login and get access token"""
-        response = requests.post(
-            f"{BASE_URL}/auth/login/",
-            json=credentials
+def print_success(text):
+    print(f"{Colors.OKGREEN}✓ {text}{Colors.ENDC}")
+
+def print_error(text):
+    print(f"{Colors.FAIL}✗ {text}{Colors.ENDC}")
+
+def print_warning(text):
+    print(f"{Colors.WARNING}! {text}{Colors.ENDC}")
+
+def print_response(response):
+    try:
+        print(f"Status: {response.status_code}")
+        if response.status_code != 204:  # No content
+            pprint(response.json())
+    except json.JSONDecodeError:
+        print("Response is not JSON")
+        print(response.text)
+
+def login(username, password):
+    global TOKEN
+    print_subheader(f"Logging in as {username}")
+    
+    response = requests.post(
+        f"{BASE_URL}/auth/login/",
+        json={"username": username, "password": password}
+    )
+    
+    if response.status_code == 200:
+        TOKEN = response.json().get('access')
+        print_success(f"Login successful. Token: {TOKEN[:10]}...")
+        return True
+    else:
+        print_error("Login failed")
+        print_response(response)
+        return False
+
+def get_headers():
+    return {
+        "Authorization": f"Bearer {TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+def test_conversation_apis():
+    print_header("Testing Conversation APIs")
+    
+    # Get all conversations
+    print_subheader("Getting all conversations")
+    response = requests.get(
+        f"{BASE_URL}/messaging/conversations/",
+        headers=get_headers()
+    )
+    print_response(response)
+    
+    # Create a new conversation
+    print_subheader("Creating a new conversation")
+    response = requests.post(
+        f"{BASE_URL}/messaging/conversations/create/",
+        headers=get_headers(),
+        json={
+            "participant_id": 2,  # Assuming user with ID 2 exists
+            "organization_id": 1,  # Assuming organization with ID 1 exists
+            "initial_message": "Hello, this is a test message!"
+        }
+    )
+    print_response(response)
+    
+    if response.status_code == 201:
+        conversation_id = response.json().get('id')
+        print_success(f"Conversation created with ID: {conversation_id}")
+        
+        # Get conversation details
+        print_subheader(f"Getting details for conversation {conversation_id}")
+        response = requests.get(
+            f"{BASE_URL}/messaging/conversations/{conversation_id}/",
+            headers=get_headers()
         )
-        if response.status_code == 200:
-            return response.json()["access"]
-        else:
-            print(f"Login failed: {response.text}")
-            return None
-
-    def setup(self):
-        """Initial setup - login and get tokens"""
-        print("\n=== Setting up test environment ===")
-        self.admin_token = self.login(ADMIN_CREDENTIALS)
-        self.user_token = self.login(USER_CREDENTIALS)
+        print_response(response)
         
-        if not self.admin_token or not self.user_token:
-            raise Exception("Failed to get authentication tokens")
+        # Get conversation messages
+        print_subheader(f"Getting messages for conversation {conversation_id}")
+        response = requests.get(
+            f"{BASE_URL}/messaging/conversations/{conversation_id}/messages/",
+            headers=get_headers()
+        )
+        print_response(response)
         
-        print("✓ Authentication successful")
-
-    def get_auth_headers(self, token):
-        """Get headers with authentication token only"""
-        return {
-            "Authorization": f"Bearer {token}"
-        }
-
-    def get_json_headers(self, token):
-        """Get headers with authentication token and JSON content type"""
-        return {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json"
-        }
-
-    def test_post_apis(self):
-        """Test post-related APIs"""
-        print("\n=== Testing Post APIs ===")
-
-        # Test post with image
-        post_data = {
-            "content": f"Test post with image and #testing hashtag {datetime.now().timestamp()}",
-            "ispublic": True
-        }
-        
-        # For multipart form data with image
-        files = None
-        if os.path.exists('test_image.jpg'):
-            files = {
-                'media': ('test_image.jpg', open('test_image.jpg', 'rb'), 'image/jpeg')
+        # Send a message
+        print_subheader(f"Sending a message to conversation {conversation_id}")
+        response = requests.post(
+            f"{BASE_URL}/messaging/conversations/{conversation_id}/send-message/",
+            headers=get_headers(),
+            json={
+                "content": "This is another test message!"
             }
-            response = requests.post(
-                f"{BASE_URL}/posts/create/",
-                headers=self.get_auth_headers(self.user_token),  # No Content-Type header
-                data=post_data,  # Use data instead of json
-                files=files
-            )
-            assert response.status_code == 201, f"Create post with image failed: {response.text}"
-            self.test_post_id = response.json()["id"]
-            print("✓ Create post with image")
-
-        # Test post with video
-        post_data_video = {
-            "content": f"Test post with video and #testing hashtag {datetime.now().timestamp()}",
-            "ispublic": True
-        }
+        )
+        print_response(response)
         
-        # For multipart form data with video
-        if os.path.exists('test_video.mp4'):
-            files = {
-                'media': ('test_video.mp4', open('test_video.mp4', 'rb'), 'video/mp4')
+        if response.status_code == 201:
+            message_id = response.json().get('id')
+            print_success(f"Message sent with ID: {message_id}")
+            
+            # Edit the message
+            print_subheader(f"Editing message {message_id}")
+            response = requests.put(
+                f"{BASE_URL}/messaging/messages/{message_id}/edit/",
+                headers=get_headers(),
+                json={
+                    "content": "This is an edited message!"
+                }
+            )
+            print_response(response)
+            
+            # React to the message
+            print_subheader(f"Reacting to message {message_id}")
+            response = requests.post(
+                f"{BASE_URL}/messaging/messages/{message_id}/react/",
+                headers=get_headers(),
+                json={
+                    "emoji": "👍"
+                }
+            )
+            print_response(response)
+            
+            # Remove reaction
+            print_subheader(f"Removing reaction from message {message_id}")
+            response = requests.delete(
+                f"{BASE_URL}/messaging/messages/{message_id}/unreact/?emoji=👍",
+                headers=get_headers()
+            )
+            print_response(response)
+            
+            # Delete the message
+            print_subheader(f"Deleting message {message_id}")
+            response = requests.delete(
+                f"{BASE_URL}/messaging/messages/{message_id}/delete/",
+                headers=get_headers()
+            )
+            print_response(response)
+    
+    # Delete the conversation (soft delete)
+    if 'conversation_id' in locals():
+        print_subheader(f"Deleting conversation {conversation_id}")
+        response = requests.delete(
+            f"{BASE_URL}/messaging/conversations/{conversation_id}/delete/",
+            headers=get_headers()
+        )
+        print_response(response)
+
+def test_group_chat_apis():
+    print_header("Testing Group Chat APIs")
+    
+    # Get all group chats
+    print_subheader("Getting all group chats")
+    response = requests.get(
+        f"{BASE_URL}/messaging/group-chats/",
+        headers=get_headers()
+    )
+    print_response(response)
+    
+    # Create a new group chat
+    print_subheader("Creating a new group chat")
+    response = requests.post(
+        f"{BASE_URL}/messaging/group-chats/create/",
+        headers=get_headers(),
+        json={
+            "name": "Test Group Chat",
+            "description": "This is a test group chat",
+            "organization_id": 1,  # Assuming organization with ID 1 exists
+            "member_ids": [2, 3],  # Assuming users with IDs 2 and 3 exist
+            "initial_message": "Welcome to the test group chat!"
+        }
+    )
+    print_response(response)
+    
+    if response.status_code == 201:
+        group_chat_id = response.json().get('id')
+        print_success(f"Group chat created with ID: {group_chat_id}")
+        
+        # Get group chat details
+        print_subheader(f"Getting details for group chat {group_chat_id}")
+        response = requests.get(
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/",
+            headers=get_headers()
+        )
+        print_response(response)
+        
+        # Get group chat messages
+        print_subheader(f"Getting messages for group chat {group_chat_id}")
+        response = requests.get(
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/messages/",
+            headers=get_headers()
+        )
+        print_response(response)
+        
+        # Send a message
+        print_subheader(f"Sending a message to group chat {group_chat_id}")
+        response = requests.post(
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/send-message/",
+            headers=get_headers(),
+            json={
+                "content": "This is a test message in the group chat!"
             }
-            response = requests.post(
-                f"{BASE_URL}/posts/create/",
-                headers=self.get_auth_headers(self.user_token),  # No Content-Type header
-                data=post_data_video,  # Use data instead of json
-                files=files
-            )
-            assert response.status_code == 201, f"Create post with video failed: {response.text}"
-            if not self.test_post_id:  # If no image post was created, use this as test post
-                self.test_post_id = response.json()["id"]
-            print("✓ Create post with video")
-
-        # If no media files were available, create a text-only post
-        if not self.test_post_id:
-            response = requests.post(
-                f"{BASE_URL}/posts/create/",
-                headers=self.get_json_headers(self.user_token),  # Use JSON headers for text-only post
-                json=post_data
-            )
-            assert response.status_code == 201, f"Create text post failed: {response.text}"
-            self.test_post_id = response.json()["id"]
-            print("✓ Create text-only post")
-
-        # Get post detail
-        response = requests.get(
-            f"{BASE_URL}/posts/{self.test_post_id}/",
-            headers=self.get_auth_headers(self.user_token)
         )
-        assert response.status_code == 200, f"Get post detail failed: {response.text}"
-        print("✓ Get post detail")
-
-        # Get feed
-        response = requests.get(
-            f"{BASE_URL}/posts/feed/",
-            headers=self.get_auth_headers(self.user_token)
-        )
-        assert response.status_code == 200, f"Get feed failed: {response.text}"
-        print("✓ Get feed")
-
-        # Create comment
-        comment_data = {
-            "content": f"Test comment {datetime.now().timestamp()}"
-        }
+        print_response(response)
+        
+        # Add members
+        print_subheader(f"Adding members to group chat {group_chat_id}")
         response = requests.post(
-            f"{BASE_URL}/posts/{self.test_post_id}/comments/create/",
-            headers=self.get_json_headers(self.user_token),
-            json=comment_data
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/add-members/",
+            headers=get_headers(),
+            json={
+                "member_ids": [4]  # Assuming user with ID 4 exists
+            }
         )
-        assert response.status_code == 201, f"Create comment failed: {response.text}"
-        self.test_comment_id = response.json()["id"]
-        print("✓ Create comment")
-
-        # Get post comments
-        response = requests.get(
-            f"{BASE_URL}/posts/{self.test_post_id}/comments/",
-            headers=self.get_auth_headers(self.user_token)
-        )
-        assert response.status_code == 200, f"Get post comments failed: {response.text}"
-        print("✓ Get post comments")
-
-        # Get reaction types
-        response = requests.get(
-            f"{BASE_URL}/posts/reaction-types/",
-            headers=self.get_auth_headers(self.user_token)
-        )
-        assert response.status_code == 200, f"Get reaction types failed: {response.text}"
-        reaction_types = response.json()
-        if reaction_types:
-            self.test_reaction_type_id = reaction_types[0]["id"]
-            print("✓ Get reaction types")
-
-            # React to post
-            response = requests.post(
-                f"{BASE_URL}/posts/{self.test_post_id}/react/",
-                headers=self.get_json_headers(self.user_token),
-                json={"reaction_type_id": self.test_reaction_type_id}
-            )
-            assert response.status_code == 200, f"React to post failed: {response.text}"
-            print("✓ React to post")
-
-            # Remove post reaction
-            response = requests.delete(
-                f"{BASE_URL}/posts/{self.test_post_id}/unreact/",
-                headers=self.get_auth_headers(self.user_token)
-            )
-            assert response.status_code == 200, f"Remove post reaction failed: {response.text}"
-            print("✓ Remove post reaction")
-
-            # React to comment
-            response = requests.post(
-                f"{BASE_URL}/posts/comments/{self.test_comment_id}/react/",
-                headers=self.get_json_headers(self.user_token),
-                json={"reaction_type_id": self.test_reaction_type_id}
-            )
-            assert response.status_code == 200, f"React to comment failed: {response.text}"
-            print("✓ React to comment")
-
-            # Remove comment reaction
-            response = requests.delete(
-                f"{BASE_URL}/posts/comments/{self.test_comment_id}/unreact/",
-                headers=self.get_auth_headers(self.user_token)
-            )
-            assert response.status_code == 200, f"Remove comment reaction failed: {response.text}"
-            print("✓ Remove comment reaction")
-
-        # Share post
-        share_data = {
-            "additional_content": f"Sharing this post! {datetime.now().timestamp()}"
-        }
+        print_response(response)
+        
+        # Change member role
+        print_subheader(f"Changing member role in group chat {group_chat_id}")
         response = requests.post(
-            f"{BASE_URL}/posts/{self.test_post_id}/share/",
-            headers=self.get_json_headers(self.user_token),
-            json=share_data
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/change-role/",
+            headers=get_headers(),
+            json={
+                "member_id": 2,  # Assuming user with ID 2 exists
+                "role": "admin"
+            }
         )
-        assert response.status_code == 201, f"Share post failed: {response.text}"
-        print("✓ Share post")
-
-        # Search posts
-        response = requests.get(
-            f"{BASE_URL}/posts/search/?q=test",
-            headers=self.get_auth_headers(self.user_token)
+        print_response(response)
+        
+        # Remove member
+        print_subheader(f"Removing member from group chat {group_chat_id}")
+        response = requests.post(
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/remove-member/",
+            headers=get_headers(),
+            json={
+                "member_id": 3  # Assuming user with ID 3 exists
+            }
         )
-        assert response.status_code == 200, f"Search posts failed: {response.text}"
-        print("✓ Search posts")
-
-        # Get trending hashtags
-        response = requests.get(
-            f"{BASE_URL}/posts/trending-hashtags/",
-            headers=self.get_auth_headers(self.user_token)
-        )
-        assert response.status_code == 200, f"Get trending hashtags failed: {response.text}"
-        print("✓ Get trending hashtags")
-
-        # Update post
-        update_data = {
-            "content": f"Updated post content {datetime.now().timestamp()}",
-            "ispublic": False
-        }
-        response = requests.put(
-            f"{BASE_URL}/posts/{self.test_post_id}/update/",
-            headers=self.get_json_headers(self.user_token),
-            json=update_data
-        )
-        assert response.status_code == 200, f"Update post failed: {response.text}"
-        print("✓ Update post")
-
-        # Update comment
-        update_comment_data = {
-            "content": f"Updated comment content {datetime.now().timestamp()}"
-        }
-        response = requests.put(
-            f"{BASE_URL}/posts/comments/{self.test_comment_id}/update/",
-            headers=self.get_json_headers(self.user_token),
-            json=update_comment_data
-        )
-        assert response.status_code == 200, f"Update comment failed: {response.text}"
-        print("✓ Update comment")
-
-        # Delete comment
+        print_response(response)
+        
+        # Delete the group chat (soft delete)
+        print_subheader(f"Deleting group chat {group_chat_id}")
         response = requests.delete(
-            f"{BASE_URL}/posts/comments/{self.test_comment_id}/delete/",
-            headers=self.get_auth_headers(self.user_token)
+            f"{BASE_URL}/messaging/group-chats/{group_chat_id}/delete/",
+            headers=get_headers()
         )
-        assert response.status_code == 204, f"Delete comment failed: {response.text}"
-        print("✓ Delete comment")
+        print_response(response)
 
-        # Delete post
+def test_user_block_apis():
+    print_header("Testing User Block APIs")
+    
+    # Get all blocks
+    print_subheader("Getting all blocks")
+    response = requests.get(
+        f"{BASE_URL}/messaging/blocks/",
+        headers=get_headers()
+    )
+    print_response(response)
+    
+    # Create a new block
+    print_subheader("Creating a new block")
+    response = requests.post(
+        f"{BASE_URL}/messaging/blocks/create/",
+        headers=get_headers(),
+        json={
+            "blocked_id": 2,  # Assuming user with ID 2 exists
+            "organization_id": 1  # Assuming organization with ID 1 exists
+        }
+    )
+    print_response(response)
+    
+    if response.status_code == 201:
+        block_id = response.json().get('id')
+        print_success(f"Block created with ID: {block_id}")
+        
+        # Get block details
+        print_subheader(f"Getting details for block {block_id}")
+        response = requests.get(
+            f"{BASE_URL}/messaging/blocks/{block_id}/",
+            headers=get_headers()
+        )
+        print_response(response)
+        
+        # Delete the block
+        print_subheader(f"Deleting block {block_id}")
         response = requests.delete(
-            f"{BASE_URL}/posts/{self.test_post_id}/delete/",
-            headers=self.get_auth_headers(self.user_token)
+            f"{BASE_URL}/messaging/blocks/{block_id}/delete/",
+            headers=get_headers()
         )
-        assert response.status_code == 204, f"Delete post failed: {response.text}"
-        print("✓ Delete post")
+        print_response(response)
 
-    def run_all_tests(self):
-        """Run all API tests"""
-        try:
-            self.setup()
-            self.test_post_apis()
-            print("\n=== All tests completed successfully! ===")
-        except AssertionError as e:
-            print(f"\n❌ Test failed: {str(e)}")
-        except Exception as e:
-            print(f"\n❌ Unexpected error: {str(e)}")
-        finally:
-            print("\nTest run completed.")
-
+def main():
+    if len(sys.argv) < 3:
+        print("Usage: python api_tests.py <username> <password>")
+        sys.exit(1)
+    
+    username = sys.argv[1]
+    password = sys.argv[2]
+    
+    if not login(username, password):
+        sys.exit(1)
+    
+    test_conversation_apis()
+    test_group_chat_apis()
+    test_user_block_apis()
 
 if __name__ == "__main__":
-    tester = APITester()
-    tester.run_all_tests() 
+    main() 
