@@ -54,9 +54,11 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'channels',
+    'corsheaders',  # Add this line
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',  # Add this line at the top
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -201,3 +203,6 @@ CHANNEL_LAYERS = {
         # },
     },
 }
+
+# # CORS Settings
+CORS_ALLOW_ALL_ORIGINS = True  # For development only
