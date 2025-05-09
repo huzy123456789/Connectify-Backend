@@ -937,3 +937,32 @@ Remove a user tag from a post.
     }
     ```
 
+#### Get Trends
+Get trending hashtags and their associated posts.
+
+- **URL**: `/api/posts/trends/`
+- **Method**: `GET`
+- **Authentication**: Required
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**:  
+    ```json
+    [
+      {
+        "hashtag": "python",
+        "post_count": 3,
+        "posts": [
+          {
+            "id": 1,
+            "content": "Learning #python is fun!",
+            // ...other post fields...
+          }
+          // ...up to 5 posts per trend...
+        ]
+      }
+      // ...other trends...
+    ]
+    ```
+- **Description**:  
+  Returns a list of the top 10 trending hashtags, each with the number of posts and up to 5 recent posts for that hashtag.
+

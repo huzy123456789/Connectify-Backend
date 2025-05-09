@@ -13,7 +13,7 @@ from organizations.models import Organization, OrganizationAdmins
 from .models import (
     Post, PostMedia, PostComment, ReactionType, 
     PostReaction, CommentReaction, PostShare, 
-    PostTag, Hashtag, PostHashtag
+    PostTag, Hashtag, PostHashtag, Trend
 )
 from .serializers import (
     PostSerializer, PostDetailSerializer, PostCreateSerializer,
@@ -790,6 +790,24 @@ def get_trending_hashtags(request):
     
     serializer = HashtagSerializer(trending_hashtags, many=True)
     return Response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_trends(request):
+    """
+    Get trending hashtags and their associated posts.
+    """
+    trends = Trend.objects.order_by('-post_count')[:10]
+    data = []
+    for trend in trends:
+        posts = trend.posts.order_by('-created_at')[:5]  # Limit to 5 recent posts per trend
+        posts_data = PostSerializer(posts, many=True, context={'request': request}).data
+        data.append({
+            "hashtag": trend.hashtag.name,
+            "post_count": trend.post_count,
+            "posts": posts_data,
+        })
+    return Response(data, status=status.HTTP_200_OK)
 
 # User Tag Operations
 

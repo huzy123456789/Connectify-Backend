@@ -1,6 +1,8 @@
 from django.db import models
 from accounts.models import User
 from organizations.models import Organization
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 
 
 class Post(models.Model):
@@ -192,6 +194,30 @@ class Trend(models.Model):
 
     def __str__(self):
         return f"Trend: #{self.hashtag.name} ({self.post_count} posts)"
+
+
+# --- SIGNALS TO KEEP TRENDS IN SYNC WITH HASHTAGS ---
+
+@receiver(post_save, sender=PostHashtag)
+def update_trend_on_posthashtag_create(sender, instance, created, **kwargs):
+    if created:
+        trend, _ = Trend.objects.get_or_create(hashtag=instance.hashtag)
+        trend.posts.add(instance.post)
+        trend.post_count = trend.posts.count()
+        trend.save()
+
+@receiver(post_delete, sender=PostHashtag)
+def update_trend_on_posthashtag_delete(sender, instance, **kwargs):
+    try:
+        trend = Trend.objects.get(hashtag=instance.hashtag)
+        trend.posts.remove(instance.post)
+        trend.post_count = trend.posts.count()
+        trend.save()
+        # Optionally, delete the trend if no posts remain
+        if trend.post_count == 0:
+            trend.delete()
+    except Trend.DoesNotExist:
+        pass
 
 
 
