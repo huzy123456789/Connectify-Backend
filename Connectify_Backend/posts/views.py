@@ -21,6 +21,7 @@ from .serializers import (
     ReactionTypeSerializer, PostReactionSerializer, CommentReactionSerializer,
     PostShareSerializer, PostTagSerializer, HashtagSerializer
 )
+from .utils import upload_to_cloudinary, delete_from_cloudinary
 
 
 # Helper function to check if user is an organization admin
@@ -69,6 +70,7 @@ def create_post(request):
     """
     Create a new post with optional media files.
     """
+    print("Request data:", request.data)
     serializer = PostCreateSerializer(data=request.data)
     if serializer.is_valid():
         # Get organization if specified
@@ -92,19 +94,38 @@ def create_post(request):
             ispublic=serializer.validated_data.get('ispublic', True)
         )
         
-        # Process media files if any
-        media_files = request.FILES.getlist('media')
-        for media_file in media_files:
-            media_type = 'image'
-            if media_file.content_type.startswith('video'):
-                media_type = 'video'
-            
-            PostMedia.objects.create(
-                post=post,
-                file=media_file,
-                media_type=media_type
-            )
-        
+        # Handle media file from mobile app format
+        media_data = request.data.get('media')
+        if media_data:
+            try:
+                # Get the file from request.FILES
+                media_file = request.FILES.get('media')
+                if media_file:
+                    # Upload to Cloudinary
+                    upload_result = upload_to_cloudinary(media_file)
+                    print("Upload result:", upload_result)
+                    
+                    if not upload_result['success']:
+                        post.delete()
+                        return Response(
+                            {"error": f"Failed to upload media: {upload_result['error']}"},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    
+                    # Get media type from file content_type
+                    media_type = media_file.content_type.split('/')[0]  # 'image' or 'video'
+                    PostMedia.objects.create(
+                        post=post,
+                        file=upload_result['url'],
+                        media_type=media_type
+                    )
+            except Exception as e:
+                post.delete()
+                return Response(
+                    {"error": f"Error processing media: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
         # Process hashtags
         content = post.content
         hashtag_list = []

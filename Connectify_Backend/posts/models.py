@@ -42,7 +42,7 @@ class PostMedia(models.Model):
     ]
     
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='media')
-    file = models.FileField(upload_to='post_media/')
+    file = models.URLField()  # Changed to URLField for Cloudinary URLs
     media_type = models.CharField(max_length=5, choices=MEDIA_TYPES)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     
@@ -181,5 +181,17 @@ class PostHashtag(models.Model):
         return f"#{self.hashtag.name} in post {self.post.id}"
 
 
+class Trend(models.Model):
+    """
+    Model representing trending hashtags and their associated posts.
+    """
+    hashtag = models.OneToOneField('Hashtag', on_delete=models.CASCADE, related_name='trend')
+    posts = models.ManyToManyField('Post', related_name='trends', blank=True)
+    post_count = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    
+    def __str__(self):
+        return f"Trend: #{self.hashtag.name} ({self.post_count} posts)"
+
+
+
