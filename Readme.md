@@ -966,3 +966,42 @@ Get trending hashtags and their associated posts.
 - **Description**:  
   Returns a list of the top 10 trending hashtags, each with the number of posts and up to 5 recent posts for that hashtag.
 
+
+#### Get Trend Posts
+Get all posts associated with a specific trend/hashtag with pagination.
+
+- **URL**: `/api/posts/trend/<hashtag_name>/`
+- **Method**: `GET`
+- **Authentication**: Required
+- **URL Parameters**:
+  - `hashtag_name`: Name of the hashtag (case insensitive)
+- **Query Parameters**:
+  - `page`: Page number (default: 1)
+  - `page_size`: Number of posts per page (default: 10)
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**:
+    ```json
+    {
+      "count": 25,
+      "next": "http://api.example.com/api/posts/trends/python/posts/?page=2",
+      "previous": null,
+      "results": [
+        {
+          "id": 1,
+          "content": "Learning #python today!",
+          "created_at": "2024-03-15T10:30:00Z",
+          // ...other post fields...
+        }
+        // ...more posts...
+      ]
+    }
+    ```
+- **Error Response**:
+  - **Code**: 404 NOT FOUND
+  - **Content**:
+    ```json
+    {
+      "error": "Trend not found"
+    }
+    ```
