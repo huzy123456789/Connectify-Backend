@@ -132,9 +132,12 @@ def create_post(request):
         words = content.split()
         for word in words:
             if word.startswith('#'):
+                # Get original hashtag name for display
                 hashtag_name = word[1:]
                 if hashtag_name:
-                    hashtag, created = Hashtag.objects.get_or_create(name=hashtag_name)
+                    # Convert to uppercase for storage and lookup
+                    uppercase_hashtag = hashtag_name.upper()
+                    hashtag, created = Hashtag.objects.get_or_create(name=uppercase_hashtag)
                     PostHashtag.objects.create(post=post, hashtag=hashtag)
                     hashtag_list.append(hashtag.name)
         
@@ -203,9 +206,12 @@ def update_post(request, pk):
             words = content.split()
             for word in words:
                 if word.startswith('#'):
+                    # Get original hashtag name for display
                     hashtag_name = word[1:]
                     if hashtag_name:
-                        hashtag, created = Hashtag.objects.get_or_create(name=hashtag_name)
+                        # Convert to uppercase for storage and lookup
+                        uppercase_hashtag = hashtag_name.upper()
+                        hashtag, created = Hashtag.objects.get_or_create(name=uppercase_hashtag)
                         PostHashtag.objects.create(post=updated_post, hashtag=hashtag)
         
         return Response(
@@ -506,8 +512,28 @@ def delete_comment(request, comment_id):
 def get_reaction_types(request):
     """
     Get all available reaction types.
+    If no reaction types exist, create default ones.
     """
     reaction_types = ReactionType.objects.all()
+    
+    # If no reaction types exist, create defaults
+    if not reaction_types.exists():
+        default_reactions = [
+            {'name': 'LIKE', 'emoji': '👍'},
+            {'name': 'LOVE', 'emoji': '❤️'},
+            {'name': 'HAHA', 'emoji': '😂'},
+            {'name': 'WOW', 'emoji': '😮'},
+            {'name': 'SAD', 'emoji': '😢'},
+            {'name': 'ANGRY', 'emoji': '😠'},
+        ]
+        
+        for reaction in default_reactions:
+            ReactionType.objects.get_or_create(
+                name=reaction['name'],
+                emoji=reaction['emoji']
+            )
+        reaction_types = ReactionType.objects.all()
+    
     serializer = ReactionTypeSerializer(reaction_types, many=True)
     return Response(serializer.data)
 
@@ -889,3 +915,28 @@ def remove_user_tag(request, post_id, user_id):
         {"message": "Tag removed"},
         status=status.HTTP_200_OK
     )
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_trend_posts(request, hashtag_name):
+    """
+    Get all posts for a specific trend/hashtag with pagination.
+    """
+    # Case insensitive hashtag lookup
+    try:
+        trend = Trend.objects.get(hashtag__name__iexact=hashtag_name)
+    except Trend.DoesNotExist:
+        return Response(
+            {"error": "Trend not found"},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    # Get and paginate posts
+    paginator = PageNumberPagination()
+    paginator.page_size = 10
+    posts = trend.posts.all().order_by('-created_at')
+    
+    page = paginator.paginate_queryset(posts, request)
+    serializer = PostSerializer(page, many=True, context={'request': request})
+    
+    return paginator.get_paginated_response(serializer.data)

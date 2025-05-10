@@ -38,6 +38,7 @@ urlpatterns = [
     path('hashtag/<str:hashtag_name>/', views.get_posts_by_hashtag, name='posts_by_hashtag'),
     path('trending-hashtags/', views.get_trending_hashtags, name='trending_hashtags'),
     path('trends/', views.get_trends, name='trends'),
+    path('trend/<str:hashtag_name>/', views.get_trend_posts, name='trend_posts'),
     
     # Tag operations
     path('<int:post_id>/tag-user/', views.tag_user_in_post, name='tag_user'),

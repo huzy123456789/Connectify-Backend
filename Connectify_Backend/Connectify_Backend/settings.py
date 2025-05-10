@@ -31,7 +31,7 @@ SECRET_KEY = env('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = env.bool('DEBUG', default=False)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['192.168.1.11']
 
 
 # Application definition
@@ -55,6 +55,11 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'channels',
     'corsheaders',  # Add this line
+]
+
+INSTALLED_APPS += [
+    'cloudinary',
+    'cloudinary_storage',
 ]
 
 MIDDLEWARE = [
@@ -206,3 +211,12 @@ CHANNEL_LAYERS = {
 
 # # CORS Settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
+
+# Cloudinary configuration
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': env('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': env('CLOUDINARY_API_KEY'),
+    'API_SECRET': env('CLOUDINARY_API_SECRET'),
+}
+
+DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
