@@ -92,6 +92,58 @@ Refresh an expired access token using a valid refresh token.
     }
     ```
 
+### Update Profile
+Update user profile information including profile image, personal details, etc.
+
+- **URL**: `/api/accounts/profile/update/`
+- **Method**: `PUT`
+- **Authentication**: Required
+- **Content-Type**: `multipart/form-data`
+- **Request Body**:
+  ```json
+  {
+    "first_name": "John",                  // optional
+    "last_name": "Doe",                    // optional
+    "profile_image": "(binary file)",      // optional, image file
+    "dob": "1990-01-01",                   // optional, YYYY-MM-DD format
+    "bio": "Bio text here"                 // optional
+  }
+  ```
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**:
+    ```json
+    {
+      "message": "Profile updated successfully",
+      "user": {
+        "id": 1,
+        "username": "johndoe",
+        "email": "johndoe@example.com",
+        "first_name": "John",
+        "last_name": "Doe",
+        "bio": "Bio text here",
+        "dob": "1990-01-01",
+        "profile_image": "https://res.cloudinary.com/.../profile.jpg"
+      }
+    }
+    ```
+- **Error Response**:
+  - **Code**: 400 BAD REQUEST
+  - **Content**:
+    ```json
+    {
+      "error": "Failed to upload profile image: [error details]"
+    }
+    ```
+  - OR
+  - **Code**: 401 UNAUTHORIZED
+  - **Content**:
+    ```json
+    {
+      "detail": "Authentication credentials were not provided."
+    }
+    ```
+
 ## Authentication Usage
 
 ### Making Authenticated Requests
@@ -966,7 +1018,6 @@ Get trending hashtags and their associated posts.
 - **Description**:  
   Returns a list of the top 10 trending hashtags, each with the number of posts and up to 5 recent posts for that hashtag.
 
-
 #### Get Trend Posts
 Get all posts associated with a specific trend/hashtag with pagination.
 
@@ -1005,3 +1056,4 @@ Get all posts associated with a specific trend/hashtag with pagination.
       "error": "Trend not found"
     }
     ```
+
