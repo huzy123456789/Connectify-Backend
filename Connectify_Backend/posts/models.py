@@ -9,6 +9,11 @@ class Post(models.Model):
     """
     Model representing a user's post in the social media app.
     """
+    POST_TYPES = [
+        ('post', 'Post'),
+        ('announcement', 'Announcement'),
+    ]
+    
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
     organization = models.ForeignKey(
         Organization, 
@@ -17,6 +22,7 @@ class Post(models.Model):
         null=True,
         blank=True
     )
+    type = models.CharField(max_length=20, choices=POST_TYPES, default='post')
     content = models.TextField(verbose_name="Post Content")
     ispublic = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

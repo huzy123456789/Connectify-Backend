@@ -20,6 +20,10 @@ class User(AbstractUser):
         help_text=_('Designates the role of this user in the system')
     )
     
+    bio = models.TextField(blank=True, null=True, help_text=_("User's bio"))
+    dob = models.DateField(blank=True, null=True, help_text=_("Date of birth"))
+    profile_image = models.URLField(blank=True, null=True, help_text=_("URL of the user's profile image"))
+    
     # Add any additional fields here
     
     def __str__(self):

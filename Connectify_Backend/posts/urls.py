@@ -43,4 +43,7 @@ urlpatterns = [
     # Tag operations
     path('<int:post_id>/tag-user/', views.tag_user_in_post, name='tag_user'),
     path('<int:post_id>/untag-user/<int:user_id>/', views.remove_user_tag, name='untag_user'),
+    
+    # Announcements
+    path('announcements/', views.get_announcements, name='announcements'),
 ]

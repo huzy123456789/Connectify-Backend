@@ -116,7 +116,7 @@ class PostSerializer(serializers.ModelSerializer):
     """
     Serializer for Post model (list view).
     """
-    user = UserSerializer(read_only=True)
+    user = serializers.SerializerMethodField()
     media = PostMediaSerializer(many=True, read_only=True)
     hashtags = serializers.SerializerMethodField()
     reactions_summary = serializers.SerializerMethodField()
@@ -126,9 +126,18 @@ class PostSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'user', 'organization', 'content', 'ispublic',
             'reaction_count', 'comment_count', 'share_count',
-            'media', 'hashtags', 'reactions_summary',
+            'media', 'hashtags', 'reactions_summary', 'type',
             'created_at', 'updated_at'
         ]
+    
+    def get_user(self, obj):
+        return {
+            "id": obj.user.id,
+            "username": obj.user.username,
+            "first_name": obj.user.first_name,
+            "last_name": obj.user.last_name,
+            "profile_image": obj.user.profile_image
+        }
     
     def get_hashtags(self, obj):
         hashtags = Hashtag.objects.filter(posts__post=obj)
@@ -184,6 +193,7 @@ class PostCreateSerializer(serializers.Serializer):
     content = serializers.CharField(required=True)
     organization_id = serializers.IntegerField(required=False, allow_null=True)
     ispublic = serializers.BooleanField(default=True)
+    type = serializers.ChoiceField(choices=['post', 'announcement'], default='post')
     tagged_user_ids = serializers.ListField(
         child=serializers.IntegerField(),
         required=False,
@@ -197,4 +207,4 @@ class PostUpdateSerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Post
-        fields = ['content', 'ispublic'] 
+        fields = ['content', 'ispublic']

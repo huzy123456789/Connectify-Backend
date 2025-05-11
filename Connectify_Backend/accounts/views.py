@@ -7,6 +7,8 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from .serializers import CustomTokenObtainPairSerializer, UserSerializer
 from .permissions import IsAdminUser, IsRegularUser
+from cloudinary.uploader import upload as cloudinary_upload
+from cloudinary.exceptions import Error as CloudinaryError
 
 
 class LoginView(APIView):
@@ -83,3 +85,54 @@ class UserOnlyView(APIView):
                 'role': request.user.role,
             }
         }, status=status.HTTP_200_OK)
+
+
+class UpdateProfileView(APIView):
+    """
+    API view to update user profile information, including profile picture, DOB, first name, last name, and bio.
+    """
+    permission_classes = [IsRegularUser]
+
+    def put(self, request, *args, **kwargs):
+        user = request.user
+        data = request.data
+        print('Request data:', data)
+        print('Request files:', request.FILES)
+        # Handle profile picture upload
+        profile_image_url = None
+        if 'media' in request.FILES:  # Changed from 'profile_image' to 'media'
+            try:
+                upload_result = cloudinary_upload(request.FILES['media'], folder='user_profiles')
+                profile_image_url = upload_result.get('secure_url')
+            except CloudinaryError as e:
+                return Response(
+                    {"error": f"Failed to upload profile image: {str(e)}"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Update user fields
+        user.first_name = data.get('first_name', user.first_name)
+        user.last_name = data.get('last_name', user.last_name)
+        user.bio = data.get('bio', user.bio)
+        user.dob = data.get('dob', user.dob)
+        if profile_image_url:
+            user.profile_image = profile_image_url
+
+        user.save()
+
+        return Response(
+            {
+                "message": "Profile updated successfully",
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "bio": user.bio,
+                    "dob": user.dob,
+                    "profile_image": user.profile_image,
+                }
+            },
+            status=status.HTTP_200_OK
+        )

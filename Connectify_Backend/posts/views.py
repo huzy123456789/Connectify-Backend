@@ -73,6 +73,14 @@ def create_post(request):
     print("Request data:", request.data)
     serializer = PostCreateSerializer(data=request.data)
     if serializer.is_valid():
+        # Check if trying to create announcement without being admin
+        post_type = serializer.validated_data.get('type', 'post')
+        if post_type == 'announcement' and request.user.role != 'ADMIN':
+            return Response(
+                {"error": "Only admins can create announcements"},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         # Get organization if specified
         organization_id = serializer.validated_data.get('organization_id')
         organization = None
@@ -91,7 +99,8 @@ def create_post(request):
             user=request.user,
             organization=organization,
             content=serializer.validated_data.get('content', ''),
-            ispublic=serializer.validated_data.get('ispublic', True)
+            ispublic=serializer.validated_data.get('ispublic', True),
+            type=post_type  # Set post type
         )
         
         # Handle media file from mobile app format
@@ -252,10 +261,7 @@ class PostPagination(PageNumberPagination):
 @permission_classes([IsAuthenticated])
 def get_feed(request):
     """
-    Get a feed of posts for the current user.
-    This includes:
-    - Public posts from all users
-    - Posts from organizations the user is a member of
+    Get a feed of regular posts for the current user.
     """
     paginator = PostPagination()
     
@@ -264,15 +270,39 @@ def get_feed(request):
     
     # Query for posts
     posts = Post.objects.filter(
-        # Public posts or posts from user's organizations
+        type='post'  # Only get regular posts
+    ).filter(
         Q(ispublic=True) | 
         Q(organization__in=user_orgs) |
-        # User's own posts
         Q(user=request.user)
     ).distinct().order_by('-created_at')
     
-    # Apply pagination
     result_page = paginator.paginate_queryset(posts, request)
+    serializer = PostSerializer(result_page, many=True)
+    
+    return paginator.get_paginated_response(serializer.data)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_announcements(request):
+    """
+    Get announcements with pagination.
+    """
+    paginator = PostPagination()
+    
+    # Get user's organizations
+    user_orgs = request.user.organizations.all()
+    
+    # Query for announcements
+    announcements = Post.objects.filter(
+        type='announcement'
+    ).filter(
+        Q(ispublic=True) | 
+        Q(organization__in=user_orgs) |
+        Q(user=request.user)
+    ).distinct().order_by('-created_at')
+    
+    result_page = paginator.paginate_queryset(announcements, request)
     serializer = PostSerializer(result_page, many=True)
     
     return paginator.get_paginated_response(serializer.data)
