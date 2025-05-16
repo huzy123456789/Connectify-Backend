@@ -3,7 +3,8 @@ from django.contrib.auth import get_user_model
 from organizations.models import Organization
 from .models import (
     Conversation, GroupChat, GroupChatMembership, Message, 
-    MessageReaction, MessageAttachment, MessageReadStatus, UserBlock
+    MessageReaction, MessageAttachment, MessageReadStatus, UserBlock,
+    MessageDeliveryStatus
 )
 
 User = get_user_model()
@@ -13,7 +14,7 @@ class UserMinimalSerializer(serializers.ModelSerializer):
     """Minimal user information for messaging context"""
     class Meta:
         model = User
-        fields = ['id', 'username', 'first_name', 'last_name', 'profile_picture']
+        fields = ['id', 'username', 'first_name', 'last_name', 'profile_image']
 
 
 class OrganizationMinimalSerializer(serializers.ModelSerializer):
@@ -56,12 +57,21 @@ class MessageReadStatusSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'read_at']
 
 
+class MessageDeliveryStatusSerializer(serializers.ModelSerializer):
+    """Serializer for message delivery status"""
+    
+    class Meta:
+        model = MessageDeliveryStatus
+        fields = ['status', 'timestamp']
+
+
 class MessageSerializer(serializers.ModelSerializer):
     """Serializer for messages"""
     sender = UserMinimalSerializer(read_only=True)
     attachments = MessageAttachmentSerializer(many=True, read_only=True)
     reactions = serializers.SerializerMethodField()
     read_by = serializers.SerializerMethodField()
+    delivery_status = serializers.SerializerMethodField()
     reply_to_preview = serializers.SerializerMethodField()
     
     class Meta:
@@ -69,7 +79,8 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sender', 'content', 'created_at', 'updated_at', 
             'is_edited', 'is_deleted', 'attachments', 'reactions', 
-            'reaction_count', 'read_by', 'reply_to', 'reply_to_preview'
+            'reaction_count', 'read_by', 'reply_to', 'reply_to_preview',
+            'delivery_status'
         ]
         read_only_fields = ['id', 'sender', 'created_at', 'updated_at', 'reaction_count']
     
@@ -82,6 +93,14 @@ class MessageSerializer(serializers.ModelSerializer):
         # Return users who have read this message
         read_statuses = obj.read_status.all()
         return MessageReadStatusSerializer(read_statuses, many=True).data
+    
+    def get_delivery_status(self, obj):
+        latest_status = MessageDeliveryStatus.objects.filter(
+            message=obj
+        ).order_by('-timestamp').first()
+        if latest_status:
+            return MessageDeliveryStatusSerializer(latest_status).data
+        return None
     
     def get_reply_to_preview(self, obj):
         # If this message is a reply, provide a preview of the original message
@@ -160,13 +179,13 @@ class ConversationSerializer(serializers.ModelSerializer):
     
     def get_unread_count(self, obj):
         # Get count of unread messages for the current user
-        user = self.context.get('request').user
-        if not user:
+        request = self.context.get('request')
+        if not request or not request.user:
             return 0
         
         # Count messages that don't have a read status for this user
         return obj.messages.exclude(
-            read_status__user=user
+            read_status__user=request.user
         ).count()
 
 
@@ -184,63 +203,45 @@ class ConversationDetailSerializer(ConversationSerializer):
         return MessageSerializer(messages, many=True).data
 
 
-class ConversationCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating a new conversation"""
+class ConversationCreateSerializer(serializers.Serializer):
     participant_id = serializers.IntegerField(write_only=True)
     organization_id = serializers.IntegerField(write_only=True)
-    initial_message = serializers.CharField(write_only=True, required=False)
-    
-    class Meta:
-        model = Conversation
-        fields = ['participant_id', 'organization_id', 'initial_message']
-    
+    initial_message = serializers.CharField(required=False, write_only=True, allow_blank=True)
+
     def validate(self, data):
         user = self.context['request'].user
         participant_id = data.get('participant_id')
         organization_id = data.get('organization_id')
-        
-        # Check if participant exists
+
+        # Validate participant exists
         try:
             participant = User.objects.get(id=participant_id)
         except User.DoesNotExist:
             raise serializers.ValidationError("Participant not found")
-        
-        # Check if organization exists
+
+        # Validate organization exists
         try:
             organization = Organization.objects.get(id=organization_id)
         except Organization.DoesNotExist:
             raise serializers.ValidationError("Organization not found")
-        
-        # Check if both users belong to the organization
-        if not organization.members.filter(id=user.id).exists():
-            raise serializers.ValidationError("You don't belong to this organization")
-        
-        if not organization.members.filter(id=participant_id).exists():
-            raise serializers.ValidationError("The participant doesn't belong to this organization")
-        
-        # Check if user is blocked
-        if UserBlock.objects.filter(
-            blocker=participant, 
-            blocked=user,
-            organization=organization
-        ).exists():
-            raise serializers.ValidationError("You have been blocked by this user")
-        
+
+        # Check if users are in the organization
+        if not organization.users.filter(id__in=[user.id, participant_id]).count() == 2:
+            raise serializers.ValidationError("Both users must be members of the organization")
+
         # Check if conversation already exists
         existing_conversation = Conversation.objects.filter(
             participants=user
         ).filter(
-            participants=participant
+            participants=participant_id
         ).filter(
-            organization=organization
+            organization=organization,
+            is_active=True
         ).first()
-        
+
         if existing_conversation:
-            raise serializers.ValidationError({
-                "detail": "Conversation already exists",
-                "conversation_id": existing_conversation.id
-            })
-        
+            raise serializers.ValidationError("Conversation already exists")
+
         return data
 
 
@@ -437,4 +438,4 @@ class UserBlockCreateSerializer(serializers.ModelSerializer):
         ).exists():
             raise serializers.ValidationError("You have already blocked this user")
         
-        return data 
+        return data

@@ -1,5 +1,8 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from .views import (
+    MessageViewSet,
+    
     # Conversation views
     conversation_list, conversation_create, conversation_detail,
     conversation_update, conversation_delete, conversation_messages,
@@ -21,7 +24,12 @@ from .views import (
 
 app_name = 'messaging'
 
+router = DefaultRouter()
+router.register(r'messages', MessageViewSet, basename='message')
+
 urlpatterns = [
+    path('', include(router.urls)),
+    
     # Conversation URLs
     path('conversations/', conversation_list, name='conversation-list'),
     path('conversations/create/', conversation_create, name='conversation-create'),
@@ -55,4 +63,4 @@ urlpatterns = [
     path('blocks/create/', user_block_create, name='user-block-create'),
     path('blocks/<int:pk>/', user_block_detail, name='user-block-detail'),
     path('blocks/<int:pk>/delete/', user_block_delete, name='user-block-delete'),
-] 
+]

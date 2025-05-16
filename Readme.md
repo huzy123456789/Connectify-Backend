@@ -92,6 +92,38 @@ Refresh an expired access token using a valid refresh token.
     }
     ```
 
+### Get User Profile
+Retrieve the authenticated user's profile information.
+
+- **URL**: `/api/auth/profile/`
+- **Method**: `GET`
+- **Authentication**: Required
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**:
+    ```json
+    {
+      "id": 1,
+      "username": "johndoe",
+      "email": "johndoe@example.com",
+      "role": "USER",
+      "first_name": "John",
+      "last_name": "Doe",
+      "bio": "User bio here",
+      "dob": "1990-01-01",
+      "profile_image": "https://res.cloudinary.com/.../profile.jpg",
+      "created_at": "2023-09-15T10:00:00Z"
+    }
+    ```
+- **Error Response**:
+  - **Code**: 401 UNAUTHORIZED
+  - **Content**:
+    ```json
+    {
+      "detail": "Authentication credentials were not provided."
+    }
+    ```
+
 ### Update Profile
 Update user profile information including profile image, personal details, etc.
 

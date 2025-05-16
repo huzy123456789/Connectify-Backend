@@ -1,3 +1,4 @@
+from datetime import timezone
 from django.shortcuts import render
 from rest_framework import viewsets, mixins, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
@@ -12,7 +13,7 @@ from accounts.models import User
 
 from .models import (
     Conversation, GroupChat, GroupChatMembership, Message, 
-    MessageReaction, MessageAttachment, MessageReadStatus, UserBlock
+    MessageReaction, MessageAttachment, MessageReadStatus, UserBlock, MessageDeliveryStatus
 )
 from .serializers import (
     ConversationSerializer, ConversationDetailSerializer, ConversationCreateSerializer,
@@ -55,7 +56,7 @@ def conversation_list(request):
         'organization'
     ).distinct()
     
-    serializer = ConversationSerializer(conversations, many=True)
+    serializer = ConversationSerializer(conversations, many=True, context={'request': request})
     return Response(serializer.data)
 
 
@@ -63,9 +64,23 @@ def conversation_list(request):
 @permission_classes([IsAuthenticated])
 def conversation_create(request):
     """Create a new conversation"""
-    serializer = ConversationCreateSerializer(data=request.data)
-    serializer.is_valid(raise_exception=True)
+    print("Creating conversation")
+    print(request.data)
     
+    if request.data.get('initial_message') == "":
+        request.data['initial_message'] = "No initial message"
+    
+    # Add context to serializer
+    serializer = ConversationCreateSerializer(
+        data=request.data,
+        context={'request': request}  # Add this line
+    )
+    
+    if not serializer.is_valid():
+        print("Serializer is not valid")
+        print(serializer.errors)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
     user = request.user
     participant_id = serializer.validated_data.get('participant_id')
     organization_id = serializer.validated_data.get('organization_id')
@@ -93,16 +108,23 @@ def conversation_create(request):
     )
 
 
-@api_view(['GET'])
+@api_view(['GET', 'DELETE'])
 @permission_classes([IsAuthenticated])
 def conversation_detail(request, pk):
-    """Get conversation details"""
+    """Get conversation details or delete a conversation"""
     user = request.user
     conversation = get_object_or_404(
         Conversation.objects.filter(participants=user, is_active=True),
         pk=pk
     )
     
+    if request.method == 'DELETE':
+        # Soft delete conversation
+        conversation.is_active = False
+        conversation.save()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    
+    # GET method - return conversation details
     serializer = ConversationDetailSerializer(conversation, context={'request': request})
     return Response(serializer.data)
 
@@ -952,3 +974,50 @@ def user_block_delete(request, pk):
     
     block.delete()
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MessageViewSet(viewsets.ModelViewSet):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        if conversation_id := self.request.query_params.get('conversation'):
+            return Message.objects.filter(conversation_id=conversation_id)
+        elif group_chat_id := self.request.query_params.get('group_chat'):
+            return Message.objects.filter(group_chat_id=group_chat_id)
+        return Message.objects.none()
+
+    def perform_create(self, serializer):
+        serializer.save(sender=self.request.user)
+        
+        # Create initial delivery status
+        MessageDeliveryStatus.objects.create(
+            message=serializer.instance,
+            status='sent',
+            timestamp=timezone.now()
+        )
+
+    @action(detail=True, methods=['post'])
+    def mark_delivered(self, request, pk=None):
+        message = self.get_object()
+        MessageDeliveryStatus.objects.create(
+            message=message,
+            status='delivered',
+            timestamp=timezone.now()
+        )
+        return Response(status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        message = self.get_object()
+        MessageReadStatus.objects.get_or_create(
+            message=message,
+            user=request.user,
+            defaults={'read_at': timezone.now()}
+        )
+        MessageDeliveryStatus.objects.create(
+            message=message,
+            status='read',
+            timestamp=timezone.now()
+        )
+        return Response(status=status.HTTP_200_OK)

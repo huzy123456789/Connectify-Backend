@@ -25,4 +25,11 @@ class IsRegularUser(permissions.BasePermission):
             request.user and 
             request.user.is_authenticated and 
             request.user.role == User.Role.USER
-        ) 
+        )
+
+class IsUserOrAdmin(permissions.BasePermission):
+    """
+    Custom permission to allow both regular users and admin users.
+    """
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and (request.user.role in ['USER', 'ADMIN'])
