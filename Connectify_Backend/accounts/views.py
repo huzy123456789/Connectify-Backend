@@ -6,9 +6,11 @@ from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from .serializers import CustomTokenObtainPairSerializer, UserSerializer
-from .permissions import IsAdminUser, IsRegularUser
+from .permissions import IsAdminUser, IsRegularUser, IsUserOrAdmin
 from cloudinary.uploader import upload as cloudinary_upload
 from cloudinary.exceptions import Error as CloudinaryError
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 
 
 class LoginView(APIView):
@@ -91,7 +93,7 @@ class UpdateProfileView(APIView):
     """
     API view to update user profile information, including profile picture, DOB, first name, last name, and bio.
     """
-    permission_classes = [IsRegularUser]
+    permission_classes = [IsUserOrAdmin]  # Changed from IsRegularUser to IsUserOrAdmin
 
     def put(self, request, *args, **kwargs):
         user = request.user
@@ -136,3 +138,12 @@ class UpdateProfileView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    """Get the authenticated user's profile"""
+    user = request.user
+    serializer = UserSerializer(user)
+    return Response(serializer.data)

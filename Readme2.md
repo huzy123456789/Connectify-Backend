@@ -73,6 +73,38 @@ Get detailed information about a specific conversation.
   - **Code**: 200 OK
   - **Content**: Conversation object with participants and messages
 
+#### Get Conversation Detail
+Delete a specific conversation.
+
+- **URL:** `/api/messaging/conversations/{id}/`
+- **Method:** `DELETE`
+- **Auth required:** Yes
+- **Permissions required:** User must be a participant in the conversation
+
+**URL Parameters:**
+- `id`: The ID of the conversation to delete
+
+**Success Response:**
+- **Code:** 204 No Content
+
+**Error Responses:**
+- **Code:** 401 Unauthorized - User is not authenticated
+- **Code:** 403 Forbidden - User is not a participant in the conversation
+- **Code:** 404 Not Found - Conversation does not exist or is already inactive
+
+**Sample Call:**
+```javascript
+fetch('https://api.connectify.com/api/messaging/conversations/123/', {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE',
+    'Content-Type': 'application/json'
+  }
+})
+```
+
+
+
 #### Get Conversation Messages
 Get paginated messages for a specific conversation.
 
@@ -480,6 +512,70 @@ To mark a message as read:
 }
 ```
 
+Or mark multiple messages as read at once:
+
+```json
+{
+  "type": "read_messages",
+  "message_ids": [123, 124, 125]
+}
+```
+
+### Connection Health Management
+
+#### Heartbeat System
+
+The server sends automatic heartbeat messages every 30 seconds to keep connections alive:
+
+```json
+{
+  "type": "heartbeat",
+  "timestamp": "2025-05-15T11:02:35.776Z",
+  "connection_id": "user_123"
+}
+```
+
+Clients should acknowledge heartbeats to help the server track connection health:
+
+```json
+{
+  "type": "heartbeat_ack",
+  "timestamp": "2025-05-15T11:02:35.900Z"
+}
+```
+
+#### Ping/Pong Mechanism
+
+Clients can test connection health by sending a ping:
+
+```json
+{
+  "type": "ping"
+}
+```
+
+The server will immediately respond with a pong:
+
+```json
+{
+  "type": "pong",
+  "timestamp": "2025-05-15T11:03:12.345Z",
+  "client_id": "username_123"
+}
+```
+
+### Connection Closure
+
+When the server closes a connection, it will use standard WebSocket close codes:
+
+- `1000`: Normal closure (client requested disconnection)
+- `1001`: Going away (server is shutting down)
+- `1006`: Abnormal closure (connection lost)
+- `4003`: Unauthorized (authentication issue)
+- `4004`: Access denied (no permission to access the requested chat)
+
+Clients should handle these codes appropriately to manage reconnection logic.
+
 ### Event Handling
 
 #### Receiving Messages
@@ -624,6 +720,15 @@ class WebSocketManager {
     this.readHandlers = [];
     this.connectionHandlers = [];
     this.errorHandlers = [];
+    this.heartbeatHandlers = [];
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectTimeout = null;
+    this.lastHeartbeat = null;
+    this.heartbeatInterval = null;
+    this.pingInterval = null;
+    this.pongTimeout = null;
+    this.reconnecting = false;
   }
 
   async connect(type, id) {
@@ -637,32 +742,90 @@ class WebSocketManager {
     
     this.socket.onopen = () => {
       console.log(`WebSocket connected to ${type} ${id}`);
+      this.reconnectAttempts = 0;
+      this.reconnecting = false;
+      
+      // Set up ping interval to test connection
+      this.pingInterval = setInterval(() => {
+        this.ping();
+      }, 60000); // Ping every 60 seconds
+      
+      // Notify connection established
       this.connectionHandlers.forEach(handler => handler(true));
     };
     
     this.socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log('WebSocket message received:', data.type);
       
       switch (data.type) {
         case 'message':
-          this.messageHandlers.forEach(handler => handler(data.message));
+        case 'chat_message':
+          this.messageHandlers.forEach(handler => 
+            handler(data.type === 'message' ? data.message : data));
           break;
+          
         case 'typing':
           this.typingHandlers.forEach(handler => 
             handler(data.user_id, data.username, data.is_typing));
           break;
+          
         case 'read':
+        case 'read_messages':
           this.readHandlers.forEach(handler => 
-            handler(data.user_id, data.message_id));
+            handler(data.user_id, data.message_ids || [data.message_id]));
           break;
+          
+        case 'heartbeat':
+          this.lastHeartbeat = new Date();
+          this.heartbeatHandlers.forEach(handler => handler(data));
+          
+          // Acknowledge heartbeat
+          this.send({
+            type: 'heartbeat_ack',
+            timestamp: new Date().toISOString()
+          });
+          break;
+          
+        case 'pong':
+          // Clear pong timeout if it exists
+          if (this.pongTimeout) {
+            clearTimeout(this.pongTimeout);
+            this.pongTimeout = null;
+          }
+          console.log('Pong received, connection is alive');
+          break;
+          
         default:
           console.log('Unknown message type:', data.type);
       }
     };
     
-    this.socket.onclose = () => {
-      console.log('WebSocket disconnected');
-      this.connectionHandlers.forEach(handler => handler(false));
+    this.socket.onclose = (event) => {
+      console.log(`WebSocket disconnected with code ${event.code}`);
+      
+      // Clear intervals
+      if (this.pingInterval) {
+        clearInterval(this.pingInterval);
+        this.pingInterval = null;
+      }
+      
+      // Handle reconnection based on close code
+      if (!this.reconnecting && 
+          this.reconnectAttempts < this.maxReconnectAttempts && 
+          event.code !== 1000) {
+        
+        this.reconnecting = true;
+        const delay = Math.min(3000 * Math.pow(2, this.reconnectAttempts), 30000);
+        console.log(`Attempting to reconnect in ${delay}ms (attempt ${this.reconnectAttempts + 1})`);
+        
+        this.reconnectTimeout = setTimeout(() => {
+          this.reconnectAttempts++;
+          this.connect(type, id);
+        }, delay);
+      }
+      
+      this.connectionHandlers.forEach(handler => handler(false, event.code));
     };
     
     this.socket.onerror = (error) => {
@@ -672,46 +835,57 @@ class WebSocketManager {
   }
   
   disconnect() {
+    // Clear all timers
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    
+    if (this.pongTimeout) {
+      clearTimeout(this.pongTimeout);
+      this.pongTimeout = null;
+    }
+    
+    // Close socket if it exists
     if (this.socket) {
-      this.socket.close();
+      this.socket.close(1000, 'Client disconnected');
       this.socket = null;
+    }
+    
+    this.reconnecting = false;
+  }
+  
+  send(messageObj) {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(messageObj));
+      return true;
+    }
+    console.error('WebSocket is not connected, unable to send message');
+    return false;
+  }
+  
+  ping() {
+    if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+      // Send ping
+      this.send({ type: 'ping' });
+      
+      // Set timeout for pong response
+      this.pongTimeout = setTimeout(() => {
+        console.warn('No pong received, connection may be dead');
+        // Attempt to reconnect
+        if (this.socket) {
+          this.socket.close(1006, 'No pong response');
+        }
+      }, 5000);
     }
   }
   
-  sendMessage(content, replyTo = null) {
-    if (!this.socket) return;
-    
-    const message = {
-      type: 'message',
-      content,
-      reply_to: replyTo
-    };
-    
-    this.socket.send(JSON.stringify(message));
-  }
-  
-  sendTypingIndicator(isTyping) {
-    if (!this.socket) return;
-    
-    const message = {
-      type: 'typing',
-      is_typing: isTyping
-    };
-    
-    this.socket.send(JSON.stringify(message));
-  }
-  
-  sendReadReceipt(messageId) {
-    if (!this.socket) return;
-    
-    const message = {
-      type: 'read',
-      message_id: messageId
-    };
-    
-    this.socket.send(JSON.stringify(message));
-  }
-  
+  // Add event handlers
   onMessage(handler) {
     this.messageHandlers.push(handler);
     return () => {
@@ -745,6 +919,27 @@ class WebSocketManager {
     return () => {
       this.errorHandlers = this.errorHandlers.filter(h => h !== handler);
     };
+  }
+  
+  onHeartbeat(handler) {
+    this.heartbeatHandlers.push(handler);
+    return () => {
+      this.heartbeatHandlers = this.heartbeatHandlers.filter(h => h !== handler);
+    };
+  }
+  
+  // Get last heartbeat timestamp
+  getLastHeartbeat() {
+    return this.lastHeartbeat;
+  }
+  
+  // Check if connection is healthy
+  isConnectionHealthy() {
+    if (!this.lastHeartbeat) return false;
+    
+    const now = new Date();
+    const diff = now.getTime() - this.lastHeartbeat.getTime();
+    return diff < 60000; // Less than 1 minute since last heartbeat
   }
 }
 
@@ -958,4 +1153,51 @@ export const MessagingProvider = ({ children }) => {
     </MessagingContext.Provider>
   );
 };
+```
+
+### Message Handling Best Practices
+
+When implementing WebSocket message handling in your client applications, keep the following in mind:
+
+1. **Message Format Consistency**: Messages from the server will always include a `type` field that indicates the message type.
+
+2. **Chat Message Format**: Chat messages sent from the server will have the following format:
+   ```json
+   {
+     "type": "chat_message",
+     "message_id": 123,       // OR "message": { "id": 123, ... }
+     "content": "Hello",
+     "sender_id": 1,
+     "sender_username": "user1",
+     "timestamp": "2025-05-15T11:42:02.667963+00:00",
+     "reply_to": null
+   }
+   ```
+
+3. **Handling Different Formats**: The server might send chat messages in two different formats:
+   - With a nested `message` object
+   - With message properties at the top level
+   
+   Your client should handle both formats, for example:
+   ```javascript
+   // Example of handling both formats
+   function handleMessage(data) {
+     const messageData = data.message || data;
+     
+     return {
+       id: messageData.id || messageData.message_id,
+       content: messageData.content,
+       sender: {
+         id: messageData.sender_id,
+         username: messageData.sender_username
+       },
+       createdAt: messageData.created_at || messageData.timestamp,
+       replyTo: messageData.reply_to
+     };
+   }
+   ```
+
+4. **Error Handling**: Always wrap WebSocket message processing in try/catch blocks to handle parsing errors or unexpected message formats.
+
+5. **Logging**: Log WebSocket events to help with debugging but be careful not to overload your logs with high-frequency events like typing indicators.
 

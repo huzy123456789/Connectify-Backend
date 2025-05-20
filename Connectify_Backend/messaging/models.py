@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from organizations.models import Organization
 
 class Conversation(models.Model):
@@ -105,7 +106,9 @@ class Message(models.Model):
         related_name='sent_messages'
     )
     content = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(default=timezone.now)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
     is_edited = models.BooleanField(default=False)
     is_deleted = models.BooleanField(default=False)
@@ -116,12 +119,13 @@ class Message(models.Model):
         blank=True, 
         related_name='replies'
     )
+    created_at = models.DateTimeField(auto_now_add=True)
     
     # Counters for performance optimization
     reaction_count = models.PositiveIntegerField(default=0)
     
     class Meta:
-        ordering = ['created_at']
+        ordering = ['-sent_at']  # Changed from created_at to sent_at and reversed order
     
     def __str__(self):
         chat_type = "conversation" if self.conversation else "group"
@@ -235,3 +239,20 @@ class UserBlock(models.Model):
     
     def __str__(self):
         return f"{self.blocker.username} blocked {self.blocked.username} in {self.organization.name}"
+
+
+class MessageDeliveryStatus(models.Model):
+    STATUS_CHOICES = [
+        ('sending', 'Sending'),
+        ('sent', 'Sent'),
+        ('delivered', 'Delivered'),
+        ('read', 'Read'),
+        ('failed', 'Failed')
+    ]
+    
+    message = models.ForeignKey(Message, on_delete=models.CASCADE)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES)
+    timestamp = models.DateTimeField(default=timezone.now)
+    
+    class Meta:
+        ordering = ['-timestamp']
