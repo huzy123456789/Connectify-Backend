@@ -169,4 +169,4 @@ example_conversation_id = "14"
 #send_message(example_conversation_id)
 run_post_creation_test(total_requests=20)
 run_login_stress_test(total_logins=20)
-upload_media_post_stress_test(concurrent_users=2)  
+upload_media_post_stress_test(concurrent_users=10)  
