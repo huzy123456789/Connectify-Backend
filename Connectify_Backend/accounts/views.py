@@ -1,17 +1,19 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.views import TokenRefreshView
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
-from .serializers import CustomTokenObtainPairSerializer, UserSerializer
+
+from .serializers import CustomTokenObtainPairSerializer, UserSerializer, UserCreateSerializer, UserRoleUpdateSerializer
 from .permissions import IsAdminUser, IsRegularUser, IsUserOrAdmin
 from cloudinary.uploader import upload as cloudinary_upload
 from cloudinary.exceptions import Error as CloudinaryError
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
-
+from organizations.models import Organization
+from .models import User
 
 class LoginView(APIView):
     """
@@ -147,3 +149,52 @@ def user_profile(request):
     user = request.user
     serializer = UserSerializer(user)
     return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def create_user(request):
+    """
+    Endpoint to create a new user.
+    """
+    serializer = UserCreateSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_user_role(request, organization_id, user_id):
+    """
+    Update a user's role within an organization.
+    Only superusers can update roles.
+    """
+    # Check if the requesting user is a superuser
+
+    is_system_admin = getattr(request.user, "role", None) == "SUPERUSER"
+    if not is_system_admin:
+        return Response(
+            {"error": "Only superusers can update user roles"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # Get the organization
+    organization = get_object_or_404(Organization, pk=organization_id)
+    
+    # Get the user to update
+    user = get_object_or_404(User, pk=user_id)
+    
+    # Check if user is part of the organization
+    if not organization.users.filter(id=user.id).exists():
+        return Response(
+            {"error": "User is not a member of this organization"},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    serializer = UserRoleUpdateSerializer(user, data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(UserSerializer(user).data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

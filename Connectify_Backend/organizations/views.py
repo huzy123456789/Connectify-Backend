@@ -167,7 +167,7 @@ def add_users_to_organization(request, pk):
     
     # Check if user is an admin of the organization or a system admin
     is_org_admin = is_organization_admin(request.user, organization)
-    is_system_admin = request.user.role == 'ADMIN'
+    is_system_admin = request.user.role == 'ADMIN' or request.user.role == 'SUPERUSER'
     
     if not (is_org_admin or is_system_admin):
         return Response(
@@ -445,3 +445,86 @@ def get_user_organizations(request, user_id=None):
     
     serializer = OrganizationSerializer(organizations, many=True)
     return Response(serializer.data)
+
+# Get Organization Users
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_organization_users(request, id):
+    """
+    Get all users in an organization.
+    """
+    # Ensure the user is authenticated
+    if not request.user.is_authenticated:
+        return Response(
+            {"error": "Authentication credentials were not provided."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    # Get the organization
+    organization = get_object_or_404(Organization, pk=id)
+
+    print(request)
+
+    is_system_admin = getattr(request.user, "role", None) == "SUPERUSER"
+
+    if not (is_system_admin):
+        return Response(
+            {"error": "You do not have permission to view this organization's users."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # Get all users for this organization
+    users = organization.users.all()
+    serializer = UserSerializer(users, many=True)
+
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+# Delete Users from Organization
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def delete_organization_users(request, id):
+    """
+    Delete users from an organization.
+    """
+    # Ensure the user is authenticated
+    if not request.user.is_authenticated:
+        return Response(
+            {"error": "Authentication credentials were not provided."},
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+    # Get the organization
+    organization = get_object_or_404(Organization, pk=id)
+
+    is_system_admin = getattr(request.user, "role", None) == "SUPERUSER"
+
+    # Check if the user is a superuser
+    if not is_system_admin:
+        return Response(
+            {"error": "You do not have permission to delete users from this organization."},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    # Validate the request data
+    user_ids = request.data.get("user_ids", [])
+    if not isinstance(user_ids, list) or not user_ids:
+        return Response(
+            {"error": "A list of user IDs is required."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Remove users from the organization
+    users_to_remove = User.objects.filter(id__in=user_ids, organizations=organization)
+    if not users_to_remove.exists():
+        return Response(
+            {"error": "No valid users found to remove."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    for user in users_to_remove:
+        organization.users.remove(user)
+
+    return Response(
+        {"message": "Users removed successfully."},
+        status=status.HTTP_200_OK
+    )

@@ -45,6 +45,24 @@ class Command(BaseCommand):
         else:
             self.stdout.write(self.style.WARNING(f'Regular user already exists: {regular_user.username}'))
             
+        #Create superadmin user (commented out)
+        superadmin_user, created = User.objects.get_or_create(
+            username='adminpucit',
+            email='admin@pucit.edu.pk',
+            defaults={
+                'first_name': 'Super',
+                'last_name': 'Admin',
+                'role': User.Role.SUPERUSER,
+            }
+        )
+        
+        if created:
+            superadmin_user.set_password('superadmin123')
+            superadmin_user.save()
+            self.stdout.write(self.style.SUCCESS(f'Superadmin user created: {superadmin_user.username}'))
+        else:
+            self.stdout.write(self.style.WARNING(f'Superadmin user already exists: {superadmin_user.username}'))
+
         self.stdout.write(self.style.SUCCESS('Test users created successfully!'))
         self.stdout.write(self.style.SUCCESS('Admin user: username=admin_test, password=admin123'))
-        self.stdout.write(self.style.SUCCESS('Regular user: username=user_test, password=user123')) 
+        self.stdout.write(self.style.SUCCESS('Regular user: username=user_test, password=user123'))

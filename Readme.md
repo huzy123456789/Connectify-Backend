@@ -1089,3 +1089,91 @@ Get all posts associated with a specific trend/hashtag with pagination.
     }
     ```
 
+### Get All Users in an Organization
+Fetch all users belonging to a specific organization.
+
+- **URL**: `/api/organizations/<id>/users/`
+- **Method**: `GET`
+- **Authentication**: Required
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**:
+    ```json
+    [
+      {
+        "id": 1,
+        "username": "johndoe",
+        "email": "johndoe@example.com",
+        "role": "USER",
+        "first_name": "John",
+        "last_name": "Doe"
+      },
+      {
+        "id": 2,
+        "username": "janedoe",
+        "email": "janedoe@example.com",
+        "role": "ADMIN",
+        "first_name": "Jane",
+        "last_name": "Doe"
+      }
+    ]
+    ```
+- **Error Response**:
+  - **Code**: 404 NOT FOUND
+  - **Content**:
+    ```json
+    {
+      "detail": "Organization not found."
+    }
+    ```
+  - **Code**: 403 FORBIDDEN
+  - **Content**:
+    ```json
+    {
+      "error": "You do not have permission to view this organization's users."
+    }
+    ```
+
+### Delete Users from an Organization
+Remove users from a specific organization.
+
+- **URL**: `/api/organizations/<id>/users/delete/`
+- **Method**: `POST`
+- **Authentication**: Required (Superuser only)
+- **Request Body**:
+  ```json
+  {
+    "user_ids": [2, 3]
+  }
+  ```
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**:
+    ```json
+    {
+      "message": "Users removed successfully."
+    }
+    ```
+- **Error Response**:
+  - **Code**: 400 BAD REQUEST
+  - **Content**:
+    ```json
+    {
+      "error": "A list of user IDs is required."
+    }
+    ```
+  - **Code**: 403 FORBIDDEN
+  - **Content**:
+    ```json
+    {
+      "error": "You do not have permission to delete users from this organization."
+    }
+    ```
+  - **Code**: 404 NOT FOUND
+  - **Content**:
+    ```json
+    {
+      "detail": "Organization not found."
+    }
+    ```
+

@@ -11,6 +11,7 @@ class User(AbstractUser):
         ADMIN = 'ADMIN', _('Admin')
         STAFF = 'STAFF', _('Staff')
         USER = 'USER', _('User')
+        SUPERUSER = 'SUPERUSER', _('Superuser')
     
     role = models.CharField(
         max_length=10,

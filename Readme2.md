@@ -1201,3 +1201,191 @@ When implementing WebSocket message handling in your client applications, keep t
 
 5. **Logging**: Log WebSocket events to help with debugging but be careful not to overload your logs with high-frequency events like typing indicators.
 
+## User Management APIs
+
+The User Management API provides endpoints for managing users within an organization, including creating users, updating user roles, and retrieving user information.
+
+### Key Features
+- Create and manage users in an organization
+- Update user roles and permissions
+- Retrieve user details and organization membership
+- Reactivate or deactivate users
+
+### User Registration and Activation
+
+#### Register User
+Register a new user in the system.
+
+- **URL**: `/api/accounts/register/`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "username": "newuser",
+    "email": "newuser@example.com",
+    "password": "securepassword",
+    "first_name": "New",
+    "last_name": "User",
+    "organization_id": 1
+  }
+  ```
+- **Success Response**:
+  - **Code**: 201 CREATED
+  - **Content**: User object with ID, username, email, and token
+- **Error Response**:
+  - **Code**: 400 BAD REQUEST
+  - **Content**:
+    ```json
+    {
+      "detail": "Email already in use"
+    }
+    ```
+
+#### Activate User
+Activate a user account (admin only).
+
+- **URL**: `/api/accounts/activate/`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "user_id": 2
+  }
+  ```
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**: Activation success message
+- **Error Response**:
+  - **Code**: 404 NOT FOUND
+  - **Content**:
+    ```json
+    {
+      "detail": "User not found"
+    }
+    ```
+
+### User Profile
+
+#### Get User Profile
+Get the profile of the authenticated user.
+
+- **URL**: `/api/accounts/profile/`
+- **Method**: `GET`
+- **Authentication**: Required
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**: User profile object with ID, username, email, and name
+
+#### Update User Profile
+Update the authenticated user's profile information.
+
+- **URL**: `/api/accounts/profile/`
+- **Method**: `PUT`
+- **Authentication**: Required
+- **Request Body**:
+  ```json
+  {
+    "first_name": "Updated",
+    "last_name": "Name",
+    "email": "updatedemail@example.com",
+    "bio": "Short bio about the user",
+    "dob": "1990-01-01",
+    "profile_image": "http://example.com/image.jpg"
+  }
+  ```
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**: Updated user profile object
+- **Error Response**:
+  - **Code**: 400 BAD REQUEST
+  - **Content**:
+    ```json
+    {
+      "detail": "Invalid date of birth"
+    }
+    ```
+
+### User Roles and Permissions
+
+#### Update User Role
+Update a user's role within an organization.
+
+- **URL**: `/api/accounts/organizations/{organization_id}/users/{user_id}/role/`
+- **Method**: `PUT`
+- **Permissions**: Only superusers (role='SUPERUSER') can use this endpoint
+- **URL Parameters**:
+  - `organization_id`: ID of the organization
+  - `user_id`: ID of the user whose role needs to be updated
+- **Request Body**:
+  ```json
+  {
+    "role": "string"  // Must be one of: "ADMIN", "STAFF", "USER"
+  }
+  ```
+- **Response**:
+  ```json
+  {
+    "id": "integer",
+    "username": "string",
+    "email": "string",
+    "first_name": "string",
+    "last_name": "string",
+    "role": "string",
+    "bio": "string",
+    "dob": "YYYY-MM-DD",
+    "profile_image": "string (URL)"
+  }
+  ```
+- **Notes**: 
+  - Only superusers can update roles
+  - Cannot set role to "SUPERUSER"
+  - User must be a member of the specified organization
+
+### User Deactivation
+
+#### Deactivate User
+Deactivate a user account (admin only).
+
+- **URL**: `/api/accounts/deactivate/`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "user_id": 2
+  }
+  ```
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**: Deactivation success message
+- **Error Response**:
+  - **Code**: 404 NOT FOUND
+  - **Content**:
+    ```json
+    {
+      "detail": "User not found"
+    }
+    ```
+
+#### Reactivate User
+Reactivate a deactivated user account (admin only).
+
+- **URL**: `/api/accounts/reactivate/`
+- **Method**: `POST`
+- **Request Body**:
+  ```json
+  {
+    "user_id": 2
+  }
+  ```
+- **Success Response**:
+  - **Code**: 200 OK
+  - **Content**: Reactivation success message
+- **Error Response**:
+  - **Code**: 404 NOT FOUND
+  - **Content**:
+    ```json
+    {
+      "detail": "User not found"
+    }
+    ```
+

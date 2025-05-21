@@ -70,3 +70,33 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         }
         
         return data
+
+class UserCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating a new user.
+    """
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = User
+        fields = ('id', 'username', 'email', 'password', 'first_name', 'last_name', 'bio', 'dob', 'profile_image','role')
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        user = User(**validated_data)
+        user.set_password(password)
+        user.save()
+        return user
+
+class UserRoleUpdateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for updating a user's role.
+    """
+    class Meta:
+        model = User
+        fields = ['role']
+
+    def validate_role(self, value):
+        if value not in [User.Role.ADMIN, User.Role.STAFF, User.Role.USER]:
+            raise serializers.ValidationError("Invalid role. Cannot set role to SUPERUSER.")
+        return value

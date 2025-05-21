@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import LoginView, CustomTokenRefreshView, AdminOnlyView, UserOnlyView, UpdateProfileView, user_profile
+from .views import LoginView, CustomTokenRefreshView, AdminOnlyView, UserOnlyView, UpdateProfileView, user_profile, create_user, update_user_role
 
 app_name = 'accounts'
 
@@ -9,5 +9,7 @@ urlpatterns = [
     path('admin-only/', AdminOnlyView.as_view(), name='admin_only'),
     path('user-only/', UserOnlyView.as_view(), name='user_only'),
     path('profile/', user_profile, name='user-profile'),
-    path('profile/update/', UpdateProfileView.as_view(), name='update_profile')
+    path('profile/update/', UpdateProfileView.as_view(), name='update_profile'),
+    path('create/', create_user, name='create_user'),
+    path('organizations/<int:organization_id>/users/<int:user_id>/role/', update_user_role, name='update_user_role'),
 ]

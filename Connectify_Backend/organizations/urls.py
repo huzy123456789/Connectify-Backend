@@ -29,4 +29,8 @@ urlpatterns = [
     # User's organizations
     path('user/', views.get_user_organizations, name='user_organizations'),
     path('user/<int:user_id>/', views.get_user_organizations, name='user_organizations_by_id'),
+    
+    # Organization users
+    path('<int:id>/users/', views.get_organization_users, name='organization_users'),
+    path('<int:id>/users/delete/', views.delete_organization_users, name='delete_organization_users'),
 ]
