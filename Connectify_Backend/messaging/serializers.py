@@ -163,20 +163,43 @@ class ConversationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
-    def get_last_message(self, obj):
-        # Get the most recent message in the conversation
-        last_message = obj.messages.order_by('-created_at').first()
-        if last_message:
-            return {
-                'id': last_message.id,
-                'sender': UserMinimalSerializer(last_message.sender).data,
-                'content': last_message.content[:100],  # Truncate long messages
-                'created_at': last_message.created_at,
-                'is_deleted': last_message.is_deleted,
-                'has_attachments': last_message.attachments.exists()
-            }
-        return None
-    
+        def get_last_message(self, obj):
+            # Get the most recent message in the group chat
+            last_message = obj.messages.order_by('-created_at').first()
+            if last_message:
+                return {
+                    'id': last_message.id,
+                    'sender': UserMinimalSerializer(last_message.sender).data,
+                    'content': last_message.content[:100],  # Truncate long messages
+                    'created_at': last_message.created_at,
+                    'is_deleted': last_message.is_deleted,
+                    'has_attachments': last_message.attachments.exists()
+                }
+            return None
+
+        def get_unread_count(self, obj):
+            request = self.context.get('request')
+            if not request or not request.user:
+                return 0
+            
+            return obj.messages.exclude(
+                read_status__user=request.user
+            ).count()
+
+        def get_user_role(self, obj):
+            request = self.context.get('request')
+            if not request or not request.user:
+                return None
+            
+            membership = obj.memberships.filter(user=request.user).first()
+            if membership:
+                return membership.role
+            return None
+
+        def get_avatar_url(self, obj):
+            # Placeholder method: can be customized to return an actual group avatar
+            return obj.avatar.url if obj.avatar else None
+
     def get_unread_count(self, obj):
         # Get count of unread messages for the current user
         request = self.context.get('request')
